@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>읽어주는 메모장</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1f6f5c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="읽어주기">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  :root {
+    --bg: #f3f5f4; --surface: #ffffff; --fg: #1d2421; --muted: #5f6b66;
+    --line: #d6ddda; --accent: #1f6f5c; --accent-fg: #ffffff; --mark: #cfe8df;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141917; --surface: #1c2320; --fg: #e4ebe8; --muted: #9aa8a2;
+      --line: #2f3a36; --accent: #5fc4a6; --accent-fg: #0d1512; --mark: #24493d;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+    font-size: 16px; line-height: 1.6; -webkit-tap-highlight-color: transparent;
+    padding-top: max(20px, env(safe-area-inset-top));
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
+  main { max-width: 720px; margin: 0 auto; display: grid; gap: 18px; }
+  h1 { font-family: "Gowun Batang", Batang, "Nanum Myeongjo", serif; font-size: 1.7rem; margin: 0; }
+  .lead { margin: 2px 0 0; color: var(--muted); font-size: .92rem; }
+  textarea {
+    width: 100%; min-height: 34vh; resize: vertical;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--surface); color: var(--fg); font: inherit; font-size: 17px; line-height: 1.7;
+  }
+  textarea:focus-visible, select:focus-visible, input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .row { display: flex; justify-content: space-between; align-items: center; margin-top: -10px; font-size: .85rem; color: var(--muted); }
+  .row button { padding: 4px 10px; font-size: .85rem; }
+  .count { font-variant-numeric: tabular-nums; }
+  .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media (max-width: 560px) { .controls { grid-template-columns: 1fr; gap: 12px; } }
+  label { display: grid; gap: 6px; font-size: .85rem; color: var(--muted); min-width: 0; }
+  label span { display: flex; justify-content: space-between; }
+  label b { color: var(--fg); font-weight: 500; font-variant-numeric: tabular-nums; }
+  select {
+    font: inherit; font-size: 1rem; color: var(--fg); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; min-width: 0;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--accent); height: 28px; }
+  .buttons { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .buttons button { white-space: nowrap; padding-inline: 6px; }
+  button {
+    font: inherit; font-weight: 600; padding: 14px 12px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--fg);
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button:disabled { opacity: .45; cursor: default; }
+  .status { font-size: .9rem; color: var(--muted); min-height: 1.6em; }
+  .preview {
+    padding: 14px 16px; border-left: 3px solid var(--accent); background: var(--surface);
+    border-radius: 0 10px 10px 0; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
+  }
+  .preview mark { background: var(--mark); color: var(--fg); border-radius: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>읽어주는 메모장</h1>
+    <p class="lead">글을 넣고 읽기를 누르면 소리 내어 읽어 줍니다. 목소리는 이 기기에 설치된 것을 씁니다.</p>
+  </header>
+
+  <textarea id="text" aria-label="읽을 글">안녕하세요. 입력한 글을 소리 내어 읽어 주는 앱입니다.
+오늘 출고 예정 주문은 128건이고, 그중 12건은 아직 송장이 나오지 않았습니다.
+속도와 높낮이를 바꿔서 다시 들어 보세요.</textarea>
+  <div class="row">
+    <button id="clear" type="button">지우기</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="controls">
+    <label for="voice"><span>목소리</span>
+      <select id="voice"></select>
+    </label>
+    <label for="rate"><span>속도 <b id="rateVal">1.0배</b></span>
+      <input id="rate" type="range" min="0.5" max="2" step="0.1" value="1">
+    </label>
+    <label for="pitch"><span>높낮이 <b id="pitchVal">1.0</b></span>
+      <input id="pitch" type="range" min="0.5" max="1.5" step="0.1" value="1">
+    </label>
+  </div>
+
+  <div class="buttons">
+    <button id="play" class="primary">읽기</button>
+    <button id="pause" disabled>일시정지</button>
+    <button id="stop" disabled>멈춤</button>
+  </div>
+  <div class="status" id="status" role="status"></div>
+
+  <div class="preview" id="preview" hidden></div>
+</main>
+
+<script>
+  const synth = window.speechSynthesis;
+  const $ = id => document.getElementById(id);
+  const text = $('text'), voiceSel = $('voice'), rate = $('rate'), pitch = $('pitch');
+  const playBtn = $('play'), pauseBtn = $('pause'), stopBtn = $('stop');
+  const status = $('status'), preview = $('preview');
+  let voices = [], reading = '';
+
+  function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+  if (!synth) {
+    status.textContent = '이 브라우저는 음성 읽기를 지원하지 않습니다.';
+    playBtn.disabled = true;
+  }
+
+  function fillVoices() {
+    voices = synth.getVoices();
+    if (!voices.length) return;
+    const ko = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('ko'));
+    const others = voices.filter(v => !ko.includes(v));
+    voiceSel.innerHTML = '';
+    for (const [name, list] of [['한국어', ko], ['다른 언어', others]]) {
+      if (!list.length) continue;
+      const g = document.createElement('optgroup');
+      g.label = name;
+      for (const v of list) {
+        const o = document.createElement('option');
+        o.value = v.voiceURI;
+        o.textContent = `${v.name} (${v.lang})`;
+        g.appendChild(o);
+      }
+      voiceSel.appendChild(g);
+    }
+    const saved = load('tts-voice');
+    if (saved && voices.some(v => v.voiceURI === saved)) voiceSel.value = saved;
+    else if (ko.length) voiceSel.value = ko[0].voiceURI;
+    if (!ko.length) status.textContent = '한국어 목소리가 없습니다. 휴대폰 설정의 "텍스트 음성 변환"(아이폰은 손쉬운 사용 > 음성 콘텐츠)에서 한국어 음성을 받아 주세요.';
+  }
+  if (synth) {
+    fillVoices();
+    synth.addEventListener?.('voiceschanged', fillVoices);
+  }
+
+  function updateLabels() {
+    $('rateVal').textContent = Number(rate.value).toFixed(1) + '배';
+    $('pitchVal').textContent = Number(pitch.value).toFixed(1);
+    $('count').textContent = text.value.length.toLocaleString() + '자';
+  }
+  for (const [el, key] of [[rate, 'tts-rate'], [pitch, 'tts-pitch']]) {
+    const v = load(key);
+    if (v) el.value = v;
+    el.addEventListener('input', () => { save(key, el.value); updateLabels(); });
+  }
+  const draft = load('tts-text');
+  if (draft !== null) text.value = draft;
+  voiceSel.addEventListener('change', () => save('tts-voice', voiceSel.value));
+  text.addEventListener('input', () => { save('tts-text', text.value); updateLabels(); });
+  $('clear').addEventListener('click', () => { text.value = ''; save('tts-text', ''); updateLabels(); text.focus(); });
+  updateLabels();
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+  function highlight(start, len) {
+    preview.innerHTML = escapeHtml(reading.slice(0, start)) +
+      '<mark>' + escapeHtml(reading.slice(start, start + len)) + '</mark>' +
+      escapeHtml(reading.slice(start + len));
+  }
+
+  function setState(state) {
+    playBtn.disabled = state === 'playing';
+    pauseBtn.disabled = state === 'idle';
+    stopBtn.disabled = state === 'idle';
+    pauseBtn.textContent = state === 'paused' ? '이어 읽기' : '일시정지';
+    status.textContent = { idle: '', playing: '읽는 중…', paused: '일시정지됨' }[state];
+    if (state === 'idle') preview.hidden = true;
+  }
+
+  playBtn.addEventListener('click', () => {
+    reading = text.value.trim();
+    if (!reading) { status.textContent = '읽을 글을 먼저 입력하세요.'; text.focus(); return; }
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(reading);
+    const v = voices.find(v => v.voiceURI === voiceSel.value);
+    if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'ko-KR'; }
+    u.rate = Number(rate.value);
+    u.pitch = Number(pitch.value);
+    u.onstart = () => { preview.hidden = false; preview.textContent = reading; setState('playing'); };
+    u.onboundary = e => {
+      const len = e.charLength || (reading.slice(e.charIndex).match(/^\S+/) || [''])[0].length;
+      highlight(e.charIndex, len);
+    };
+    u.onend = () => setState('idle');
+    u.onerror = e => {
+      setState('idle');
+      if (e.error !== 'canceled' && e.error !== 'interrupted') status.textContent = '읽지 못했습니다 (' + e.error + '). 다른 목소리를 골라 보세요.';
+    };
+    synth.speak(u);
+  });
+
+  pauseBtn.addEventListener('click', () => {
+    if (synth.paused) { synth.resume(); setState('playing'); }
+    else { synth.pause(); setState('paused'); }
+  });
+  stopBtn.addEventListener('click', () => { synth.cancel(); setState('idle'); });
+
+  text.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); playBtn.click(); }
+  });
+
+  // 오프라인에서도 열리도록 서비스 워커 등록
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
