@@ -69,6 +69,12 @@
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
   button:disabled { opacity: .45; cursor: default; }
   .status { font-size: .9rem; color: var(--muted); min-height: 1.6em; }
+  /* 버튼은 맨 위에 붙여 두어 글이 길어도 바로 누를 수 있게 */
+  .top {
+    position: sticky; top: 0; z-index: 1; display: grid; gap: 6px;
+    margin-top: calc(-1 * max(20px, env(safe-area-inset-top)));
+    padding-top: max(12px, env(safe-area-inset-top)); background: var(--bg);
+  }
   .preview {
     padding: 14px 16px; border-left: 3px solid var(--accent); background: var(--surface);
     border-radius: 0 10px 10px 0; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere;
@@ -78,14 +84,21 @@
 </head>
 <body>
 <main>
+  <div class="top">
+    <div class="buttons">
+      <button id="play" class="primary">읽기</button>
+      <button id="pause" disabled>일시정지</button>
+      <button id="stop" disabled>멈춤</button>
+    </div>
+    <div class="status" id="status" role="status"></div>
+  </div>
+
   <header>
     <h1>읽어주는 메모장</h1>
     <p class="lead">글을 넣고 읽기를 누르면 소리 내어 읽어 줍니다. 목소리는 이 기기에 설치된 것을 씁니다.</p>
   </header>
 
-  <textarea id="text" aria-label="읽을 글">안녕하세요. 입력한 글을 소리 내어 읽어 주는 앱입니다.
-오늘 출고 예정 주문은 128건이고, 그중 12건은 아직 송장이 나오지 않았습니다.
-속도와 높낮이를 바꿔서 다시 들어 보세요.</textarea>
+  <textarea id="text" aria-label="읽을 글">안녕하세요.</textarea>
   <div class="row">
     <button id="clear" type="button">지우기</button>
     <span class="count" id="count"></span>
@@ -99,16 +112,9 @@
       <input id="rate" type="range" min="0.5" max="2" step="0.1" value="1">
     </label>
     <label for="pitch"><span>높낮이 <b id="pitchVal">1.0</b></span>
-      <input id="pitch" type="range" min="0.5" max="1.5" step="0.1" value="1">
+      <input id="pitch" type="range" min="0.1" max="2" step="0.1" value="1">
     </label>
   </div>
-
-  <div class="buttons">
-    <button id="play" class="primary">읽기</button>
-    <button id="pause" disabled>일시정지</button>
-    <button id="stop" disabled>멈춤</button>
-  </div>
-  <div class="status" id="status" role="status"></div>
 
   <div class="preview" id="preview" hidden></div>
 </main>
@@ -129,28 +135,53 @@
     playBtn.disabled = true;
   }
 
+  // 한국어 캐릭터: 기기의 한국어 목소리 하나를 속도·높낮이만 바꿔서 쓴다
+  const CHARACTERS = [
+    { id: 'baby',     name: '👶 아기',       rate: 1.1, pitch: 2.0 },
+    { id: 'squirrel', name: '🐿️ 다람쥐',     rate: 1.8, pitch: 2.0 },
+    { id: 'robot',    name: '🤖 로봇',       rate: 0.9, pitch: 0.1 },
+    { id: 'grandpa',  name: '👴 할아버지',   rate: 0.7, pitch: 0.3 },
+    { id: 'anchor',   name: '📺 아나운서',   rate: 1.15, pitch: 0.9 },
+    { id: 'sloth',    name: '🦥 나무늘보',   rate: 0.5, pitch: 0.7 },
+    { id: 'rapper',   name: '🎤 래퍼',       rate: 2.0, pitch: 1.0 }
+  ];
+  const LANGS = [['ko', '한국어'], ['en', '영어'], ['ja', '일본어'], ['zh', '중국어']];
+  const langOf = v => v.lang.toLowerCase().replace('_', '-').slice(0, 2);
+  let koVoice = null;
+
+  function addOption(group, value, label) {
+    const o = document.createElement('option');
+    o.value = value;
+    o.textContent = label;
+    group.appendChild(o);
+  }
+
   function fillVoices() {
-    voices = synth.getVoices();
-    if (!voices.length) return;
-    const ko = voices.filter(v => v.lang.toLowerCase().replace('_', '-').startsWith('ko'));
-    const others = voices.filter(v => !ko.includes(v));
+    const all = synth.getVoices();
+    if (!all.length) return;  // 목록은 나중에 voiceschanged 로 다시 온다
+    voices = all.filter(v => LANGS.some(([code]) => code === langOf(v)));
+    const ko = voices.filter(v => langOf(v) === 'ko');
+    koVoice = ko[0] || null;
     voiceSel.innerHTML = '';
-    for (const [name, list] of [['한국어', ko], ['다른 언어', others]]) {
-      if (!list.length) continue;
+    for (const [code, name] of LANGS) {
+      const list = voices.filter(v => langOf(v) === code);
+      if (!list.length && code !== 'ko') continue;
       const g = document.createElement('optgroup');
       g.label = name;
-      for (const v of list) {
-        const o = document.createElement('option');
-        o.value = v.voiceURI;
-        o.textContent = `${v.name} (${v.lang})`;
-        g.appendChild(o);
-      }
+      for (const v of list) addOption(g, 'v:' + v.voiceURI, `${v.name} (${v.lang})`);
       voiceSel.appendChild(g);
+      if (code === 'ko') {
+        const c = document.createElement('optgroup');
+        c.label = '한국어 캐릭터';
+        for (const ch of CHARACTERS) addOption(c, 'c:' + ch.id, ch.name);
+        voiceSel.appendChild(c);
+      }
     }
     const saved = load('tts-voice');
-    if (saved && voices.some(v => v.voiceURI === saved)) voiceSel.value = saved;
-    else if (ko.length) voiceSel.value = ko[0].voiceURI;
-    if (!ko.length) status.textContent = '한국어 목소리가 없습니다. 휴대폰 설정의 "텍스트 음성 변환"(아이폰은 손쉬운 사용 > 음성 콘텐츠)에서 한국어 음성을 받아 주세요.';
+    if (saved && [...voiceSel.options].some(o => o.value === saved)) voiceSel.value = saved;
+    else if (koVoice) voiceSel.value = 'v:' + koVoice.voiceURI;
+    else voiceSel.value = 'c:' + CHARACTERS[0].id;
+    status.textContent = koVoice ? '' : '한국어 목소리가 없습니다. 휴대폰 설정의 "텍스트 음성 변환"(아이폰은 손쉬운 사용 > 음성 콘텐츠)에서 한국어 음성을 받아 주세요.';
   }
   if (synth) {
     fillVoices();
@@ -169,7 +200,14 @@
   }
   const draft = load('tts-text');
   if (draft !== null) text.value = draft;
-  voiceSel.addEventListener('change', () => save('tts-voice', voiceSel.value));
+  voiceSel.addEventListener('change', () => {
+    save('tts-voice', voiceSel.value);
+    const ch = CHARACTERS.find(c => 'c:' + c.id === voiceSel.value);
+    const [r, p] = ch ? [ch.rate, ch.pitch] : [1, 1];
+    rate.value = r; pitch.value = p;
+    save('tts-rate', r); save('tts-pitch', p);
+    updateLabels();
+  });
   text.addEventListener('input', () => { save('tts-text', text.value); updateLabels(); });
   $('clear').addEventListener('click', () => { text.value = ''; save('tts-text', ''); updateLabels(); text.focus(); });
   updateLabels();
@@ -197,7 +235,7 @@
     if (!reading) { status.textContent = '읽을 글을 먼저 입력하세요.'; text.focus(); return; }
     synth.cancel();
     const u = new SpeechSynthesisUtterance(reading);
-    const v = voices.find(v => v.voiceURI === voiceSel.value);
+    const v = voiceSel.value.startsWith('c:') ? koVoice : voices.find(v => 'v:' + v.voiceURI === voiceSel.value);
     if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'ko-KR'; }
     u.rate = Number(rate.value);
     u.pitch = Number(pitch.value);

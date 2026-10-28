@@ -1,5 +1,5 @@
 // 앱 파일을 저장해 두고 오프라인에서도 열기. 파일을 고치면 VERSION을 올린다.
-const VERSION = 'tts-v1';
+const VERSION = 'tts-v2';
 const FILES = ['./', 'index.html', 'manifest.json', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
